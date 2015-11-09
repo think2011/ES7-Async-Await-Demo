@@ -1,13 +1,44 @@
-var sleep = function (time) {
+import fs from 'fs';
+import path from 'path';
+import request from 'request';
+
+var movieDir = __dirname + '/movies';
+
+// 读取文件列表
+var readFiles = function () {
     return new Promise(function (resolve, reject) {
-        setTimeout(function () {
-            resolve();
-        }, time);
-    })
+        fs.readdir(movieDir, function (err, files) {
+            resolve(files.map((v) => path.parse(v).name));
+        });
+    });
 };
 
+// 获取海报
+var getPoster = function (movieName) {
+    let url = `https://api.douban.com/v2/movie/search?q=${encodeURI(movieName)}`;
+
+    return new Promise(function (resolve, reject) {
+        request({url: url, json: true}, function (error, response, body) {
+            if (error) return reject(error);
+
+            resolve(body.subjects[0].images.large);
+        })
+    });
+};
+
+// 保存海报
+var savePoster = function (movieName, url) {
+    request.get(url).pipe(fs.createWriteStream(path.join(movieDir, movieName + '.jpg')));
+};
+
+
 (async () => {
-    console.log('start');
-    await sleep(2000);
-    console.log('end');
+    let files = await readFiles();
+
+    // await只能使用在原生语法
+    for (var name of files) {
+        savePoster(name, await getPoster(name));
+    }
+
+    console.log('获取海报完成');
 })();
