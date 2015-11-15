@@ -1,15 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+import colog from 'colog';
 import request from 'request';
 
-var movieDir = __dirname + '/movies',
+var movieDir = process.argv[2] || __dirname + '/movies',
     exts     = ['.mkv', '.avi', '.mp4', '.rm', '.rmvb', '.wmv'];
 
 // 读取文件列表
 var readFiles = function () {
     return new Promise(function (resolve, reject) {
         fs.readdir(movieDir, function (err, files) {
-            resolve(files.filter((v) => exts.includes(path.parse(v).ext)));
+            resolve(files.filter(v => exts.includes(path.parse(v).ext)));
         });
     });
 };
@@ -27,22 +28,39 @@ var getPoster = function (movieName) {
     });
 };
 
+// 检查文件是否存在
+var existPoster = function (movieName) {
+    const file = path.join(movieDir, movieName) + '.jpg';
+
+    return new Promise(function (resolve, reject) {
+        fs.exists(file, resolve);
+    });
+};
+
 // 保存海报
-var savePoster = function (movieName, url) {
-    request.get(url).pipe(fs.createWriteStream(path.join(movieDir, movieName + '.jpg')));
+var savePoster = async function (movieName) {
+    const file = path.join(movieDir, movieName) + '.jpg';
+
+    if (await existPoster(movieName)) {
+        colog.warning(`无需获取【${movieName}】的海报`);
+    } else {
+        const url = await getPoster(movieName);
+
+        request.get(url)
+            .pipe(fs.createWriteStream(file))
+            .on('finish', () => {
+                colog.answer(`成功获取【${movieName}】的海报`);
+            });
+    }
 };
 
 
 (async () => {
     let files = await readFiles();
 
-    // await只能使用在原生语法
     for (var file of files) {
-        let name = path.parse(file).name;
+        let movieName = path.parse(file).name;
 
-        console.log(`正在获取【${name}】的海报`);
-        savePoster(name, await getPoster(name));
+        savePoster(movieName);
     }
-
-    console.log('=== 获取海报完成 ===');
 })();
